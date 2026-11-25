@@ -5,23 +5,24 @@ import matplotlib.pyplot as plt
 from math import factorial
 
 #------------------------------TBM Measurements and Geometry--------------------------
-r_cm  = 29.619 #cm                 #radius of TBM
-d_cm  = r_cm*2 #cm                #diameter of TBM
-r  = ((r_cm/100)*3.281*12) #in    #radius of TBM
-L  = 97.8 #in                       #total length of TBM
-L1 = 40.5 #in                       #length of TBM section 1 (75% of weight)
-L2 = 27.3 #in                       #length of TBM section 2 (10%)
-L3 = 30 #in                         #length of TBM section 3 (15%)
+r_cm  = 29.619 #cm                    #radius of TBM
+d_cm  = r_cm*2 #cm                    #diameter of TBM
+d_in = d_cm/2.54 #in                  #diameter of TBM
+r  = ((r_cm/100)*3.281*12) #in        #radius of TBM
+L  = 97.8 #in                         #total length of TBM
+L1 = 40.5 #in                         #length of TBM section 1 (75% of weight)
+L2 = 27.3 #in                         #length of TBM section 2 (10%)
+L3 = 30 #in                           #length of TBM section 3 (15%)
 w_tbm_kg = 516.8 #kg                  #total weight of TBM
-w_tbm_lb = w_tbm_kg*2.20462 #lb     #total weight of TBM (1252 lb)
-w1 = (w_tbm_lb*.75)/L1 #lb/in       #weight per unit length, section 1
-w2 = (w_tbm_lb*.10)/L2 #lb/in       #weight per unit length, section 2
+w_tbm_lb = w_tbm_kg*2.20462 #lb       #total weight of TBM (1137 lb)
+w1 = (w_tbm_lb*.75)/L1 #lb/in         #weight per unit length, section 1
+w2 = (w_tbm_lb*.10)/L2 #lb/in         #weight per unit length, section 2
 w3 = (w_tbm_lb*.15)/L3 #lb/in       #weight per unit length, section 3
 if abs(L1 + L2 + L3 - L) > 0.05:
     print(f"WARNING: L1+L2+L3 = {L1+L2+L3:.1f} in but L = {L:.1f} in")
 
 #------------------------TBM Forces on the Tube--------------------------
-d_opening = 6.25 #in                     #total width of the opening for the torque reaction system
+d_opening = 6.5 #in                     #total width of the opening for the torque reaction system
 h_opening = 1.5 #in                 #height of the opening for the torque reaction system
 d_tube = d_opening / 2 #in             #tube contact distance from TBM centreline
 u = 0.8                             #friction coefficient, TBM on steel tube; worst case friction scenario
@@ -30,7 +31,7 @@ theta = np.arcsin(d_tube/r) #rad    #contact angle
 theta_deg = np.degrees(theta) #deg  #contact angle
 h = r*np.cos(theta) #in             #height of the TBM centreline above the tube
 h_outer_to_beam_top =  r - h #in              #height of the torque reaction system to height of beam
-h_beam = round(h_outer_to_beam_top + h_opening, 1) #in  #height of beam required given the width of the torque reaction system opening
+h_beam = round(h_outer_to_beam_top + h_opening, 2) #in  #height of beam required given the width of the torque reaction system opening
 F_x = F*np.sin(theta) #lb           #sideways part
 F_y = F*np.cos(theta) #lb           #vertical part
 Friction_force = u*F #lb            #along the beam
@@ -38,10 +39,9 @@ print("The height of the beam required to hold the TBM at the given Torque syste
 print("Force in the vertical direction:", f"{F_y:.2f} lb")
 print("Force in the horizontal direction:", f"{F_x:.2f} lb")
 print("Angle of contact:", f"{theta_deg:.2f} deg")
-
 #-------------------------AISC Tube: HSS 4x2x1/8--------------------------
 #Need to change if tube dimensions change
-Tube = (h_beam, 2, (1/4))           #in, (height, width, wall thickness)
+Tube = (round(h_beam, 1), 2, (1/4))           #in, (height, width, wall thickness)
 w_tube = 5.41 #lb/f                 #weight of tube (4.75 lb/ft)
 w_self = w_tube/12 #lb/in           #self-weight (0.3958 lb/in)
 A = 1.51 #in^2                      #area per ASIC HSS tables
@@ -65,7 +65,7 @@ Fy_shear = 0.6*Fy #psi              #shear AND torsional yield (AISC G and H3)
 #================== BEAM ON 4 TIES: REACTIONS, SHEAR, MOMENT, DEFLECTION ==================
 CASE = "point"      # "point"  = all of W as one point load on one beam (worst case)
                     # "normal" = machine spread along both beams (75/10/15 split)
-PLOT = True
+PLOT = True         # "lifting" = forces that occur when lifting the TBM (vertical and horizontal)
 
 L_beam   = 88.5                       # in, beam length
 ties     = [1.0, 29.6, 59.0, 87.5]    # in, tie centres (x from front end of beam)
@@ -105,6 +105,8 @@ def peak(arr):
     i = np.argmax(abs(arr)); return abs(arr[i]), xs[i]
 
 # ---- Vertical and horizontal loads for the chosen case ----
+if CASE == "lifting":
+    pass 
 if CASE == "point":
     vert_pts,  vert_dist  = [(F_y, a_pt)], []
     horiz_pts, horiz_dist = [(F_x, a_pt)], []
@@ -221,4 +223,61 @@ for name, tau in {"Web (side walls)":    stress_shear_vert  + stress_torsion,
     print(f"   Tresca    = {tresca:.0f} psi  |  FS = {Fy/tresca:.2f}")
     print(f"   Von Mises = {von_mises:.0f} psi  |  FS = {Fy/von_mises:.2f}")
     print("-" * (len(header) - 1))
+# %%
+#-------------------------Tipping + Slipping Calculations-------------------------
+
+#-------------------------Human Variables-------------------------
+human_height = 70 #in           #average hight of a man (5'10")
+human_weight = 200              #lb, average weight of a college man (180 lb)
+lean_angle = np.radians(20)     #deg, upper limit of the lean angle majority of people make (5<x<20)
+lean_force_static = ((.56*human_height)/(.82*human_height)) * human_weight * np.tan(lean_angle)  #lb, force required to push a man over at a given lean angle
+d_stop = 8 #in                  #stopping distance of a human hitting a wall
+lean_force_kinetic = ((human_weight * human_height)*(1-np.cos(lean_angle))) / d_stop
+avg_push_force = 60 #lb         #This push force accounts for the average person attempting to push without bracing of any sorts
+max_push_force = 160 #lb        #Max force of a person attempting to push the machine
+push_force = [avg_push_force, max_push_force]
+lean_force = [lean_force_static, lean_force_kinetic]
+#-------------------------Cradle only: Pushing and slipping-------------------------
+F_push_top_cradle = (w_tbm_lb*(d_opening/2))/d_in  #lb        #worst case: pushed from the side at the top of the cradle
+F_push_mid_cradle = (w_tbm_lb*(d_opening/2))/(d_in/2)  #lb    #worst case: pushed from the side at the mid-height of the cradle
+print(f"{'-'*25}Cradle pushing{'-'*25}")
+type_push = ['without', 'with']
+type_trying = ['(not trying)', '(trying)']
+x = 0
+for push in push_force:
+    print(f"Force required to push the TBM out of the cradle with a force of {push}lb from:")
+    print(f"   The top-most part of the TBM:  {F_push_top_cradle:.1f} lb | FS = {F_push_top_cradle/push:.2f}")
+    print(f"   The mid-height of the TBM:     {F_push_mid_cradle:.1f} lb | FS = {F_push_mid_cradle/push:.2f}")
+    print(f"This run uses the average push force of a human", type_push[x], "bracing", type_trying[x])
+    print(f"{'-'*75}")
+    x += 1
+    #print("Scenario 1 assumes that the person pushing as a perfect grip at the top of the TBM (which should never be the case due to sliding/friction)")
+    #print("Scenario 2 assumes that the person pushes perpendicularly at the mid-point")
+
+Frictional_torque = Friction_force*r
+Inertia = .25*w_tbm_lb*r**2
+print(f"\n{'-'*25}Tangential force required to spin the TBM{'-'*25}")
+print(f"force required to spin the TBM:", Frictional_torque, 'lb')
+
+#------------------------Cardle + Table: tipping and slipping--------------------
+w_cradle_kg = 107 #kg                 #weight of cradle
+w_cradle_lb = w_cradle_kg*2.20462 #lb #weight of cradle (235.9 lb)
+w_table_kg = 252.5 #kg                #weight of table
+w_table_lb = w_table_kg*2.20462 #lb   #weight of table (556.7 lb)
+width_table_legs = 24.25 #in          #wight from inside to inside of wheels (28.4in outside to outside)
+height_table = 33.25 #in              #height of table            
+F_tip_top_table = ((w_tbm_lb + w_cradle_lb + w_table_lb)*(width_table_legs/2)) / (height_table + 4 + d_in)
+F_tip_mid_table = ((w_tbm_lb + w_cradle_lb + w_table_lb)*(width_table_legs/2)) / (height_table + 4 + r)
+
+print(f"\n{'-'*25}Cardle + Table: tipping and slipping{'-'*25}")
+type_lean = ('static', 'kinetic')
+x = 0
+for lean in lean_force:
+    print(f"Force required to tip the table from", type_lean[x], "leaning from:")
+    print(f"   The top-most part of the TBM ({(height_table + 4 + d_in):.1f}in):  {F_tip_top_table:.1f} lb | FS = {(F_tip_top_table/lean):.2f}")
+    print(f"   The mid-height of the TBM ({(height_table + 4 + r):.1f}in):     {F_tip_mid_table:.1f} lb | FS = {(F_tip_mid_table/lean):.2f}")
+    print(f"{'-'*75}")
+    x += 1
+
+
 # %%
